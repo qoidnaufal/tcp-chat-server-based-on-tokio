@@ -28,22 +28,43 @@ async fn server(
     loop {
         match rx.recv().await {
             Ok(msg) => match msg {
-                Messages::NewMessage((text, other_addr)) => {
-                    println!("INFO: client {} send message: {}", other_addr, text);
+                Messages::NewMessage((text, client_addr)) => {
+                    println!("INFO: client {} send message: {}", client_addr, text);
 
-                    if addr != other_addr {
-                        let mut txt = format!(">> {}: ", other_addr);
+                    if addr != client_addr {
+                        let mut txt = format!(">> {}: ", client_addr);
                         txt.push_str(&text);
-                        writer.write(txt.as_bytes()).await.map_err(|err| {
+                        writer.write_all(txt.as_bytes()).await.map_err(|err| {
                             format!("Unable to write the message back to the client: {}", err)
                         })?;
                     }
                 }
-                Messages::ClientDisconnected(other_addr) => {
-                    println!("INFO: client {} is disconnected", other_addr);
+                Messages::ClientDisconnected(client_addr) => {
+                    println!("INFO: client {} is disconnected", client_addr);
+
+                    if addr != client_addr {
+                        let txt =
+                            format!("SERVER INFO: new client {} is disconnected\n", client_addr);
+                        writer.write_all(txt.as_bytes()).await.map_err(|err| {
+                            format!(
+                                "Unable to notify the client that someone is disconnected: {}",
+                                err
+                            )
+                        })?;
+                    }
                 }
-                Messages::ClientConnected(other_addr) => {
-                    println!("INFO: client {} is connected", other_addr);
+                Messages::ClientConnected(client_addr) => {
+                    println!("INFO: client {} is connected", client_addr);
+
+                    if addr != client_addr {
+                        let txt = format!("SERVER INFO: new client {} is connected\n", client_addr);
+                        writer.write_all(txt.as_bytes()).await.map_err(|err| {
+                            format!(
+                                "Unable to notify the client that someone is connected: {}",
+                                err
+                            )
+                        })?;
+                    }
                 }
             },
             Err(err) => {
@@ -58,14 +79,6 @@ async fn server(
 }
 
 // ----- client
-
-// there's an unknown behavior (duplicating message):
-// 1. when a new client is connected, it's either:
-// a. the tx is being shared so they send the same message, or
-// b. the rx is duplicating itself?
-
-// 2. the same when i disconnect the client,
-// but interestingly, the duplication gradually ended after 3 messages
 
 async fn client(
     reader: ReadHalf<TcpStream>,
@@ -126,8 +139,8 @@ async fn main() -> Result<()> {
                 tokio::spawn(async move { server(writer, rx, addr).await });
                 tokio::spawn(async move { client(reader, tx, addr).await });
             }
-            Err(e) => {
-                format!("Unable to accept new connection: {}", e);
+            Err(err) => {
+                format!("Unable to accept new connection: {}", err);
             }
         }
     }
