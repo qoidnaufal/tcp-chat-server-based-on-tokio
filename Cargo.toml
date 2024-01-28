@@ -1,5 +1,5 @@
 [package]
-name = "chalk"
+name = "tcp-chat-server-based-on-tokio"
 version = "0.1.0"
 edition = "2021"
 
